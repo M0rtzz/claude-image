@@ -37,14 +37,20 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-DEFAULT_BASE = (
-    os.environ.get("OPENAI_IMAGE_BASE_URL")
-    or os.environ.get("OPENAI_BASE_URL")
-    or "https://jmrai.net/v1"
-)
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")
 DEFAULT_QUALITY = "high"   # this host charges the same across qualities
 DEFAULT_CONCURRENCY = 4
+_timeout_raw = (os.environ.get("OPENAI_IMAGE_TIMEOUT") or "600").strip().lower()
+DEFAULT_TIMEOUT = None if _timeout_raw in {"0", "none", "infinite", "inf"} else int(_timeout_raw)
+DEFAULT_HEARTBEAT = int(os.environ.get("OPENAI_IMAGE_HEARTBEAT", "30"))
+DEFAULT_USER_AGENT = os.environ.get(
+    "OPENAI_IMAGE_USER_AGENT",
+    (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 gpt_image.py/1.0"
+    ),
+)
+VERBOSE = sys.stderr.isatty() or os.environ.get("OPENAI_IMAGE_VERBOSE") == "1"
 
 # Constraints reported by the host's gpt-image-2.
 MAX_SIDE = 3840
@@ -60,6 +66,13 @@ def _key() -> str:
             "  export OPENAI_IMAGE_BASE_URL='https://jmrai.net/v1'   # optional"
         )
     return key
+
+
+DEFAULT_BASE = (
+    os.environ.get("OPENAI_IMAGE_BASE_URL")
+    or os.environ.get("OPENAI_BASE_URL")
+    or "https://jmrai.net/v1"
+).strip().rstrip("/")
 
 
 def _validate_size(size: str) -> None:
@@ -85,25 +98,116 @@ def _validate_size(size: str) -> None:
 _print_lock = threading.Lock()
 
 
+def _log(msg: str) -> None:
+    if VERBOSE:
+        print(msg, file=sys.stderr, flush=True)
+
+
+def _headers(content_type: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {_key()}",
+        "Content-Type": content_type,
+        "Accept": "application/json",
+        "User-Agent": DEFAULT_USER_AGENT,
+    }
+
+
+def _format_http_error(req: urllib.request.Request, code: int, body: str) -> str:
+    msg = f"HTTP {code} from {req.full_url}"
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        data = None
+
+    if isinstance(data, dict):
+        detail = str(data.get("detail") or "")
+        title = str(data.get("title") or "")
+        error_code = str(data.get("error_code") or "")
+        if code == 403 and (
+            "browser signature" in detail.lower()
+            or error_code == "1010"
+            or "access denied" in title.lower()
+        ):
+            return (
+                f"{msg}\n"
+                "The gateway blocked Python's default request signature. "
+                "This script now sends a browser-like User-Agent by default, "
+                "but your gateway may still require a custom one.\n"
+                "Try setting OPENAI_IMAGE_USER_AGENT or use a different gateway.\n"
+                f"{body}"
+            )
+
+    return f"{msg}\n{body}"
+
+
+def _with_heartbeat(fn, label: str):
+    done = threading.Event()
+
+    def _worker():
+        try:
+            result[0] = fn()
+        except BaseException as e:  # noqa: BLE001
+            error[0] = e
+        finally:
+            done.set()
+
+    result = [None]
+    error = [None]
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+    if not VERBOSE:
+        t.join()
+    else:
+        start = time.time()
+        while not done.wait(DEFAULT_HEARTBEAT):
+            elapsed = int(time.time() - start)
+            _log(f"[gpt-image] still waiting for {label} ({elapsed}s elapsed)")
+
+    if error[0] is not None:
+        raise error[0]
+    return result[0]
+
+
 def _send(req: urllib.request.Request, retries: int = 4) -> dict:
     last_err: str | None = None
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(req, timeout=600) as resp:
-                return json.loads(resp.read())
+            _log(f"[gpt-image] POST {req.full_url} (attempt {attempt + 1}/{retries})")
+            resp = _with_heartbeat(
+                lambda: urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT),
+                f"response headers from {req.full_url}",
+            )
+            with resp:
+                _log(
+                    f"[gpt-image] connected: HTTP {getattr(resp, 'status', '?')} "
+                    "received, waiting for full body"
+                )
+                body = _with_heartbeat(
+                    resp.read,
+                    f"response body from {req.full_url}",
+                )
+                _log(f"[gpt-image] response body received ({len(body)} bytes)")
+                return json.loads(body)
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", "replace")
             # Retry on 429 and 5xx, surface 4xx immediately
             if (e.code == 429 or 500 <= e.code < 600) and attempt < retries - 1:
                 wait = 2 ** attempt + (0.1 * attempt)
+                _log(
+                    f"[gpt-image] retrying in {wait:.1f}s after HTTP {e.code} "
+                    f"from {req.full_url}"
+                )
                 time.sleep(wait)
                 last_err = f"HTTP {e.code}: {body}"
                 continue
-            sys.exit(f"HTTP {e.code} from {req.full_url}\n{body}")
+            sys.exit(_format_http_error(req, e.code, body))
         except urllib.error.URLError as e:
             last_err = f"network error: {e}"
             if attempt < retries - 1:
-                time.sleep(2 ** attempt)
+                wait = 2 ** attempt
+                _log(f"[gpt-image] retrying in {wait:.1f}s after {last_err}")
+                time.sleep(wait)
                 continue
             sys.exit(last_err)
     sys.exit(last_err or "unknown error")
@@ -114,11 +218,7 @@ def _post_json(path: str, payload: dict) -> dict:
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {_key()}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers=_headers("application/json"),
         method="POST",
     )
     return _send(req)
@@ -158,19 +258,22 @@ def _post_multipart(path: str, fields: dict, files: dict[str, list[str]]) -> dic
     req = urllib.request.Request(
         url,
         data=body,
-        headers={
-            "Authorization": f"Bearer {_key()}",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Accept": "application/json",
-        },
+        headers=_headers(f"multipart/form-data; boundary={boundary}"),
         method="POST",
     )
     return _send(req)
 
 
 def _download(url: str) -> bytes:
-    with urllib.request.urlopen(url, timeout=300) as r:
-        return r.read()
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": DEFAULT_USER_AGENT},
+    )
+    _log(f"[gpt-image] downloading image from {url}")
+    with urllib.request.urlopen(req, timeout=300) as r:
+        data = r.read()
+        _log(f"[gpt-image] downloaded image bytes ({len(data)} bytes)")
+        return data
 
 
 def _output_paths(out_arg: str | None, n: int) -> list[Path]:
@@ -196,6 +299,7 @@ def _output_paths(out_arg: str | None, n: int) -> list[Path]:
 
 def _write_item(item: dict, dest: Path) -> Path:
     if "b64_json" in item and item["b64_json"]:
+        _log(f"[gpt-image] decoding base64 image to {dest}")
         dest.write_bytes(base64.b64decode(item["b64_json"]))
     elif "url" in item and item["url"]:
         dest.write_bytes(_download(item["url"]))
