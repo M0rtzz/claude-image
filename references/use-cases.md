@@ -377,7 +377,7 @@ or alter any text or signage in the scene.
 **Object replacement:**
 
 ```bash
-$GPT_IMG edit -i ./room.png \
+"${GPT_IMG[@]}" edit -i ./room.png \
   -p 'Edit the input image: replace ONLY the white plastic chairs with solid oak wood chairs of the same shape and proportions. Preserve exactly: camera angle and framing, room lighting and shadow direction, floor reflections and contact shadows, all other furniture, walls, and decor, color temperature and white balance. Render: realistic oak grain, subtle satin finish, natural contact shadows beneath each chair leg. Do not: add new objects, change saturation, restyle the room, or alter any text or signage in the scene.' \
   -o ./room-oak.png
 ```
@@ -385,7 +385,7 @@ $GPT_IMG edit -i ./room.png \
 **Background swap:**
 
 ```bash
-$GPT_IMG edit -i ./headshot.png \
+"${GPT_IMG[@]}" edit -i ./headshot.png \
   -p 'Edit the input image: replace ONLY the background with a softly blurred professional bookshelf. Preserve exactly: subject face, hair, expression, clothing, hairline, lighting on the face. Render: warm tungsten light from the left matching the existing skin tones, shallow depth of field on the bookshelf. Do not: alter the subject in any way, no resizing, no facial smoothing.' \
   -o ./headshot-bookshelf.png
 ```
@@ -395,7 +395,7 @@ $GPT_IMG edit -i ./headshot.png \
 Make a mask PNG where white = area to fill, transparent = keep. Then:
 
 ```bash
-$GPT_IMG edit -i ./photo.png --mask ./mask.png \
+"${GPT_IMG[@]}" edit -i ./photo.png --mask ./mask.png \
   -p 'Fill the masked area with continuation of the cobblestone street, matching perspective, lighting, and existing wear pattern. Preserve everything outside the mask exactly.' \
   -o ./photo-cleaned.png
 ```
@@ -403,7 +403,7 @@ $GPT_IMG edit -i ./photo.png --mask ./mask.png \
 **Style transfer (preserve composition, change rendering):**
 
 ```bash
-$GPT_IMG edit -i ./photo.png \
+"${GPT_IMG[@]}" edit -i ./photo.png \
   -p 'Convert the input image into a Studio Ghibli watercolor illustration. Preserve exactly: composition, subject pose, framing, head turn, hand position. Change ONLY: rendering style. Render: hand-drawn linework, soft pastel watercolor wash, gentle paper texture. Do not: change the pose, add new elements, or alter the framing.' \
   -o ./photo-ghibli.png
 ```

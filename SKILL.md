@@ -13,6 +13,23 @@ This skill teaches you the prompt grammar, the workflow, and gives you a zero-de
 
 Always go through `scripts/gpt_image.py`. Don't curl the API directly — the script handles auth, retries, b64-vs-URL responses, multipart for edits, parallel single-image calls when batching, and writes files to disk for you. The user can't see images that only exist in the API response.
 
+### Mandatory no-proxy Python prefix
+
+For **every** Python invocation made while using this skill, run the interpreter through the following `env` prefix. Never invoke `python` or `python3` bare, including for `--help`, generation, editing, verification, or post-processing commands.
+
+```bash
+env \
+  -u HTTP_PROXY \
+  -u HTTPS_PROXY \
+  -u ALL_PROXY \
+  -u http_proxy \
+  -u https_proxy \
+  -u all_proxy \
+  python3 ...
+```
+
+Place any inline environment assignments, such as API credentials, after the `-u` options and before `python3`.
+
 ## Setup (once per machine)
 
 Two environment variables:
@@ -30,22 +47,39 @@ Use the absolute path so it works from any working directory:
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/gpt-image-2"   # adjust if installed elsewhere
-GPT_IMG="python3 $SKILL_DIR/scripts/gpt_image.py"
+GPT_IMG=(
+  env
+  -u HTTP_PROXY
+  -u HTTPS_PROXY
+  -u ALL_PROXY
+  -u http_proxy
+  -u https_proxy
+  -u all_proxy
+  python3 "$SKILL_DIR/scripts/gpt_image.py"
+)
 ```
+
+Define this array in the same Bash tool call that uses it; shell state does not persist between separate tool calls. Invoke it as `"${GPT_IMG[@]}"`, preserving the quotes.
 
 ### Env vars in Claude Code's Bash subshell
 
 Claude Code's Bash tool runs **non-interactive shells that do NOT auto-source `~/.zshrc`**. If the user has the credentials in their shell rc and you get `ERROR: set OPENAI_IMAGE_API_KEY`, prefix every call with a source:
 
 ```bash
-source ~/.zshrc 2>/dev/null && python3 $SKILL_DIR/scripts/gpt_image.py generate -p "..." -o ./out.png
+source ~/.zshrc 2>/dev/null && env \
+  -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy \
+  python3 "$SKILL_DIR/scripts/gpt_image.py" generate -p "..." -o ./out.png
 ```
 
 Or, if the user provided the key in-conversation, pass it inline (don't write it to disk yourself):
 
 ```bash
-OPENAI_IMAGE_API_KEY="sk-..." OPENAI_IMAGE_BASE_URL="https://jmrai.net/v1" \
-  python3 $SKILL_DIR/scripts/gpt_image.py generate -p "..." -o ./out.png
+env \
+  -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy \
+  OPENAI_IMAGE_API_KEY="sk-..." OPENAI_IMAGE_BASE_URL="https://jmrai.net/v1" \
+  python3 "$SKILL_DIR/scripts/gpt_image.py" generate -p "..." -o ./out.png
 ```
 
 Test once at the start of a session: `source ~/.zshrc && echo "${OPENAI_IMAGE_API_KEY:0:10}"`. If that prints a key prefix, you can safely use the source-prefix pattern for the rest of the session.
@@ -53,7 +87,7 @@ Test once at the start of a session: `source ~/.zshrc && echo "${OPENAI_IMAGE_AP
 ### Generate
 
 ```bash
-$GPT_IMG generate \
+"${GPT_IMG[@]}" generate \
   -p "<prompt>" \
   --size 1536x864 \
   -o ./hero.png
@@ -64,7 +98,7 @@ Defaults: `--quality high` (cost is identical across tiers on this host), `--siz
 ### Edit (precise local change)
 
 ```bash
-$GPT_IMG edit \
+"${GPT_IMG[@]}" edit \
   -i ./input.png \
   -p "Edit the input image: change ONLY <X>. Preserve exactly: <Y>. Do not: <Z>." \
   -o ./edited.png
@@ -75,7 +109,7 @@ $GPT_IMG edit \
 White pixels in the mask = region to regenerate; transparent = keep.
 
 ```bash
-$GPT_IMG edit -i ./photo.png --mask ./mask.png \
+"${GPT_IMG[@]}" edit -i ./photo.png --mask ./mask.png \
   -p "Fill the masked area with continuation of the cobblestone street, matching perspective and lighting." \
   -o ./inpainted.png
 ```
@@ -85,7 +119,7 @@ $GPT_IMG edit -i ./photo.png --mask ./mask.png \
 `-n N` fires N **parallel** single-image requests. Faster wall-clock than serial, and works regardless of host n>1 support.
 
 ```bash
-$GPT_IMG generate -p "..." -n 4 --concurrency 4 -o ./out
+"${GPT_IMG[@]}" generate -p "..." -n 4 --concurrency 4 -o ./out
 # writes out-1.png … out-4.png
 ```
 
@@ -95,7 +129,7 @@ $GPT_IMG generate -p "..." -n 4 --concurrency 4 -o ./out
 - **Transparent backgrounds** (`--background transparent` returns HTTP 400). For sprites / icons / cutouts, use a **chroma-key color in the prompt** (`solid magenta #FF00FF background`) and remove it client-side after with `rembg` or ImageMagick (see `references/post-process.md`).
 - Aspect ratios above 3:1 or sides ≥ 3840px. The script validates upfront.
 
-Run `python3 $SKILL_DIR/scripts/gpt_image.py --help` (or `<subcommand> --help`) for every flag.
+Run `"${GPT_IMG[@]}" --help` (or `<subcommand> --help`) for every flag.
 
 ## Sizes — pick deliberately
 
