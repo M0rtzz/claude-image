@@ -1,11 +1,22 @@
 # API reference
 
-Endpoints, parameters, response shapes, error handling, and host-specific behavior for the gpt-image-2 model behind an OpenAI-compatible host.
+Endpoints, parameters, response shapes, error handling, and host-specific behavior for GPT Image models behind an OpenAI-compatible host.
 
-## Model facts
+## Model selection
 
-- **Released:** April 2026.
-- **Strengths:** instruction following on long prompts, multilingual text rendering (Chinese/Japanese/Korean), custom resolutions, precise local edits.
+| Model ID | Selection |
+|----------|-----------|
+| `gpt-image-2.5-sunburst` | Default for generation and editing |
+| `gpt-image-2.5-flare` | Select with `--model gpt-image-2.5-flare` or `OPENAI_IMAGE_MODEL=gpt-image-2.5-flare` |
+
+Precedence: explicit `--model` → `OPENAI_IMAGE_MODEL` → `gpt-image-2.5-sunburst`. Both JSON generation requests and multipart edit requests send the selected ID in the `model` field. This also applies to masked edits and parallel batches.
+
+Legacy IDs such as `gpt-image-2` and host-specific IDs remain accepted without a fixed allowlist. Model availability depends on the configured API host.
+
+## Existing host defaults and constraints
+
+The current defaults and validation retain the host behavior documented for GPT Image 2; model selection does not change them.
+
 - **Constraints on this host (jmrai.net default):**
   - Quality tiers all cost the same — default `--quality high`.
   - Multi-image **input** in one /edits call is NOT supported. For composition, chain two edit calls.
@@ -30,7 +41,7 @@ Generate one image from a text prompt. JSON body.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `model` | string | yes | `gpt-image-2` |
+| `model` | string | yes | `gpt-image-2.5-sunburst` (script default) or `gpt-image-2.5-flare`; legacy and host-specific IDs also accepted |
 | `prompt` | string | yes | Up to ~4000 chars; sweet spot 50–300 words for instructional prompts |
 | `n` | int | no (default 1) | The script ignores host-side n>1 and parallelizes client-side instead — see § Parallel batching |
 | `size` | string | no | `WxH`. Common: `1024x1024`, `1536x864`, `1536x1024`, `1024x1536`, `1024x1792`, `1792x1024`, `2048x2048`. Constraints: max side <3840, ratio ≤3:1 |
@@ -59,7 +70,7 @@ Edit, mask-inpaint, or style-transfer an existing image. Multipart/form-data.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `model` | string | yes | `gpt-image-2` |
+| `model` | string | yes | `gpt-image-2.5-sunburst` (script default) or `gpt-image-2.5-flare`; legacy and host-specific IDs also accepted |
 | `image` | file (PNG/JPEG) | yes | **One** file. This host does not accept multiple input images per call |
 | `prompt` | string | yes | Use the `change ONLY X / preserve Y exactly / do not Z` pattern |
 | `mask` | file (PNG with alpha) | no | White pixels = regenerate, transparent = keep |
@@ -104,7 +115,7 @@ Example payload sent for each parallel call:
 
 ```json
 {
-  "model": "gpt-image-2",
+  "model": "gpt-image-2.5-sunburst",
   "prompt": "...",
   "n": 1,
   "size": "1024x1024",
@@ -133,7 +144,7 @@ curl https://jmrai.net/v1/images/generations \
   -H "Authorization: Bearer $OPENAI_IMAGE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-image-2",
+    "model": "gpt-image-2.5-sunburst",
     "prompt": "a red panda eating bamboo, watercolor",
     "size": "1024x1024",
     "quality": "high",
@@ -148,7 +159,7 @@ The response contains either a URL or a `b64_json` string. You'll need to downlo
 ```bash
 curl https://jmrai.net/v1/images/edits \
   -H "Authorization: Bearer $OPENAI_IMAGE_API_KEY" \
-  -F "model=gpt-image-2" \
+  -F "model=gpt-image-2.5-sunburst" \
   -F "image=@./input.png" \
   -F "prompt=Edit the input: change ONLY the sky to a clear blue. Preserve everything else exactly." \
   -F "size=1024x1024" \
@@ -160,7 +171,7 @@ curl https://jmrai.net/v1/images/edits \
 ```bash
 curl https://jmrai.net/v1/images/edits \
   -H "Authorization: Bearer $OPENAI_IMAGE_API_KEY" \
-  -F "model=gpt-image-2" \
+  -F "model=gpt-image-2.5-sunburst" \
   -F "image=@./input.png" \
   -F "mask=@./mask.png" \
   -F "prompt=Fill the masked area with continuation of the cobblestone street, matching perspective and lighting." \
@@ -177,9 +188,9 @@ curl https://jmrai.net/v1/images/edits \
 
 ## Versioning notes
 
-This is an OpenAI-compatible host. The specific model `gpt-image-2` is provided by the host (jmrai.net by default). Behavior may diverge slightly from upstream — when in doubt, generate a small low-quality test before relying on a specific feature.
+This is an OpenAI-compatible host (jmrai.net by default). The script defaults to `gpt-image-2.5-sunburst` and also supports selecting `gpt-image-2.5-flare`. Behavior and availability may differ by model and host — when in doubt, generate a small low-quality test before relying on a specific feature.
 
-If migrating from a previous model (`gpt-image-1.5` or older), OpenAI's official guidance is: don't rewrite your prompt library. Run the same prompts on `gpt-image-2`, compare outputs, and tune only the ones that drifted.
+When migrating from a previous model, reuse your existing prompts on the selected model, compare outputs, and tune the ones that drifted.
 
 ## Anti-patterns to avoid in prompts
 

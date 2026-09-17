@@ -1,9 +1,11 @@
 ---
-name: gpt-image-2
-description: Use when generating, editing, composing, or iterating on images — illustrations for reports/web, posters with Chinese or English typography, pitch-deck slides, UI mockups, infographics, pixel art, game sprites, character reference sheets, app icons, logo concepts, photoreal product shots, or photo edits with precise local changes. Symptoms include the user asking for "图", "图片", "插图", "海报", "封面", "图标", "ppt素材", "游戏素材", "改图", "修图", "logo", "draw me", "make an image", "生成一张", or attaching an image they want modified. Calls the gpt-image-2 model (April 2026 release; near-perfect text rendering including Chinese, custom resolutions up to 3840px, precise edits with preserve/change pattern) via OpenAI-compatible /images/generations and /images/edits endpoints.
+name: gpt-image
+description: Use when generating, editing, composing, or iterating on images — illustrations for reports/web, posters with Chinese or English typography, pitch-deck slides, UI mockups, infographics, pixel art, game sprites, character reference sheets, app icons, logo concepts, photoreal product shots, or photo edits with precise local changes. Symptoms include the user asking for "图", "图片", "插图", "海报", "封面", "图标", "ppt素材", "游戏素材", "改图", "修图", "logo", "draw me", "make an image", "生成一张", or attaching an image they want modified. Supports gpt-image-2.5-sunburst (default) and gpt-image-2.5-flare via OpenAI-compatible /images/generations and /images/edits endpoints, with legacy and host-specific model IDs accepted.
 ---
 
-# gpt-image-2
+# gpt-image
+
+Supports `gpt-image-2.5-sunburst` (default) and `gpt-image-2.5-flare` for generation and editing. The skill name and installation directory are `gpt-image`.
 
 GPT Image 2 — released April 2026 — is the first generation that handles long instructional prompts cleanly, renders text correctly (Chinese / Japanese / Korean too), supports custom resolutions (max side < 3840px, ratio ≤ 3:1), and does precise local edits via the `change ONLY X / keep Y exactly` pattern.
 
@@ -46,7 +48,7 @@ If `OPENAI_IMAGE_API_KEY` is missing, the script exits with a clear message — 
 Use the absolute path so it works from any working directory:
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/gpt-image-2"   # adjust if installed elsewhere
+SKILL_DIR="$HOME/.claude/skills/gpt-image"   # adjust if installed elsewhere
 GPT_IMG=(
   env
   -u HTTP_PROXY
@@ -93,7 +95,19 @@ Test once at the start of a session: `source ~/.zshrc && echo "${OPENAI_IMAGE_AP
   -o ./hero.png
 ```
 
-Defaults: `--quality high` (cost is identical across tiers on this host), `--size 1024x1024`.
+Defaults: `--model gpt-image-2.5-sunburst`, `--quality high` (cost is identical across tiers on this host), `--size 1024x1024`.
+
+### Choose a model
+
+Model selection precedence: explicit `--model` → `OPENAI_IMAGE_MODEL` → `gpt-image-2.5-sunburst`. Respect the user's configured model unless they request a different one. Both `generate` and `edit` accept the same model flag, including parallel variants and masked edits.
+
+```bash
+"${GPT_IMG[@]}" generate --model gpt-image-2.5-flare -p "<prompt>" -o ./flare.png
+"${GPT_IMG[@]}" edit --model gpt-image-2.5-flare -i ./input.png \
+  -p "Change ONLY the sky to blue. Preserve everything else exactly." -o ./edited.png
+```
+
+Set `OPENAI_IMAGE_MODEL=gpt-image-2.5-flare` to use Flare by default. Legacy IDs such as `gpt-image-2` and host-specific model IDs remain accepted; model availability depends on the configured API host.
 
 ### Edit (precise local change)
 

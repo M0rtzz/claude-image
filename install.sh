@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Install the gpt-image-2 skill into ~/.claude/skills/ and (optionally) set
+# Install the gpt-image skill into ~/.claude/skills/ and (optionally) set
 # credentials. Idempotent: re-running just refreshes things.
 
 set -euo pipefail
 
-SKILL_NAME="gpt-image-2"
+SKILL_NAME="gpt-image"
 TARGET="${HOME}/.claude/skills/${SKILL_NAME}"
 SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -68,7 +68,7 @@ else
     if [[ -n "$SHELL_RC" ]]; then
       {
         echo ""
-        echo "# gpt-image-2 skill — added by install.sh on $(date '+%Y-%m-%d')"
+        echo "# gpt-image skill — added by install.sh on $(date '+%Y-%m-%d')"
         echo "export OPENAI_IMAGE_API_KEY=\"$api_key\""
         echo "export OPENAI_IMAGE_BASE_URL=\"$base_url\""
       } >> "$SHELL_RC"

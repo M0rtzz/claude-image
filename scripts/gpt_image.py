@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""gpt_image.py — call the gpt-image-2 model via the OpenAI-compatible Images API.
+"""gpt_image.py — call GPT Image models via the OpenAI-compatible Images API.
+
+Defaults to gpt-image-2.5-sunburst; gpt-image-2.5-flare is also supported.
+Override with --model or OPENAI_IMAGE_MODEL, including host-specific model IDs.
 
 Subcommands:
   generate   POST /images/generations
@@ -11,7 +14,7 @@ OPENAI_BASE_URL if the image-specific ones aren't set.
 
 Behavior tuned for this host:
   * Quality is the same price across tiers, so default --quality high.
-  * Multi-image *input* is NOT supported by this host's gpt-image-2.
+  * Multi-image *input* is NOT supported by this script.
     For composition, do it in two steps (generate base, then edit).
   * `-n N` fires N **parallel** single-image requests rather than asking the
     API for n=N in one call. Faster wall-clock and works regardless of whether
@@ -37,7 +40,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")
+DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst")
 DEFAULT_QUALITY = "high"   # this host charges the same across qualities
 DEFAULT_CONCURRENCY = 4
 _timeout_raw = (os.environ.get("OPENAI_IMAGE_TIMEOUT") or "600").strip().lower()
@@ -372,7 +375,7 @@ def cmd_edit(a: argparse.Namespace) -> None:
     _validate_size(a.size)
     if len(a.image) > 1:
         sys.exit(
-            "ERROR: this host's gpt-image-2 does not accept multiple input images.\n"
+            "ERROR: this script accepts only one input image per edit request.\n"
             "Workflow for compositions: generate or edit a base, then edit again "
             "with the next layer described in the prompt."
         )
@@ -413,7 +416,7 @@ def cmd_edit(a: argparse.Namespace) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Call gpt-image-2 over the OpenAI-compatible Images API.",
+        description="Call GPT Image models over the OpenAI-compatible Images API.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Notes for this host (jmrai.net default):\n"
@@ -424,6 +427,13 @@ def main() -> None:
         ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    common_model = dict(
+        default=DEFAULT_MODEL,
+        help=f"model ID: gpt-image-2.5-sunburst or gpt-image-2.5-flare "
+             f"(default {DEFAULT_MODEL}; configurable via OPENAI_IMAGE_MODEL; "
+             "legacy and host-specific IDs are also accepted)",
+    )
 
     common_quality = dict(
         choices=["low", "medium", "high", "standard", "hd"],
@@ -443,7 +453,7 @@ def main() -> None:
                    help=f"max parallel requests when n>1 (default {DEFAULT_CONCURRENCY})")
     g.add_argument("-o", "--out",
                    help="output file path or directory; auto-suffixed when n>1")
-    g.add_argument("--model", default=DEFAULT_MODEL)
+    g.add_argument("--model", **common_model)
     g.add_argument("--quality", **common_quality)
     g.add_argument("--style", choices=["vivid", "natural"],
                    help="overall style hint if supported")
@@ -466,7 +476,7 @@ def main() -> None:
     e.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
                    help=f"max parallel requests when n>1 (default {DEFAULT_CONCURRENCY})")
     e.add_argument("-o", "--out")
-    e.add_argument("--model", default=DEFAULT_MODEL)
+    e.add_argument("--model", **common_model)
     e.add_argument("--quality", **common_quality)
     e.add_argument("--background", choices=["transparent", "opaque", "auto"])
     e.add_argument("--format", choices=["url", "b64_json"])

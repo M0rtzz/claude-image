@@ -1,7 +1,7 @@
 # Claude image
 
-> 教 Claude Code、Codex 等 agent 真正用好 GPT Image 2 的 drop-in skill 包。
-> A drop-in skill that teaches Claude Code, Codex, and other agents to actually use GPT Image 2.
+> 教 Claude Code、Codex 等 agent 真正用好 GPT Image 2 / 2.5 的 drop-in skill 包，默认使用 `gpt-image-2.5-sunburst`。
+> A drop-in skill for GPT Image 2 / 2.5 in Claude Code, Codex, and other agents, defaulting to `gpt-image-2.5-sunburst`.
 
 [简体中文](#简体中文) · [English](#english)
 
@@ -20,7 +20,7 @@ GPT Image 2 是 2026 年 4 月发布的——这一代是分水岭：长指令�
 ### 仓库结构
 
 ```
-gpt-image-2/
+gpt-image/
 ├── SKILL.md                # 入口。Claude 自动加载。
 ├── README.md               # 你正在看的这个。
 ├── LICENSE                 # MIT。
@@ -52,8 +52,8 @@ gpt-image-2/
 #### Claude Code(一行)
 
 ```bash
-git clone git@github.com:M0rtzz/claude-image.git ~/.claude/skills/gpt-image-2 \
-  && bash ~/.claude/skills/gpt-image-2/install.sh
+git clone git@github.com:M0rtzz/claude-image.git ~/.claude/skills/gpt-image \
+  && bash ~/.claude/skills/gpt-image/install.sh
 ```
 
 安装脚本会问你要 API key,写到 `~/.zshrc`,可选跑一个冒烟测试。
@@ -63,8 +63,8 @@ git clone git@github.com:M0rtzz/claude-image.git ~/.claude/skills/gpt-image-2 \
 #### Codex(或任何扫描 `~/.agents/skills/` 的 agent)
 
 ```bash
-git clone git@github.com:M0rtzz/claude-image.git ~/.agents/skills/gpt-image-2 \
-  && bash ~/.agents/skills/gpt-image-2/install.sh
+git clone git@github.com:M0rtzz/claude-image.git ~/.agents/skills/gpt-image \
+  && bash ~/.agents/skills/gpt-image/install.sh
 ```
 
 同一个 skill,同一个脚本,同一组环境变量。
@@ -72,8 +72,8 @@ git clone git@github.com:M0rtzz/claude-image.git ~/.agents/skills/gpt-image-2 \
 #### 手动 / 其他 agent / 直接命令行
 
 ```bash
-git clone git@github.com:M0rtzz/claude-image.git
-cd gpt-image-2
+git clone git@github.com:M0rtzz/claude-image.git gpt-image
+cd gpt-image
 
 echo 'export OPENAI_IMAGE_API_KEY="sk-..."' >> ~/.zshrc
 echo 'export OPENAI_IMAGE_BASE_URL="https://jmrai.net/v1"' >> ~/.zshrc
@@ -87,18 +87,33 @@ open test.png
 
 ### 凭据
 
-两个环境变量。配置就这么多。
+配置 API 凭据和地址，也可通过环境变量指定默认模型。
 
 | 变量 | 必填 | 默认值 |
 |------|-----|--------|
 | `OPENAI_IMAGE_API_KEY` | 是 | — |
 | `OPENAI_IMAGE_BASE_URL` | 否 | `https://jmrai.net/v1` |
+| `OPENAI_IMAGE_MODEL` | 否 | `gpt-image-2.5-sunburst` |
 
 如果没设置 image 专用的两个,会回退到 `OPENAI_API_KEY` / `OPENAI_BASE_URL`——如果你已经在用同一个 key 跑 chat completions 这就很方便。
 
 **自建反代image 2的API 原生支持此skill >_< ** https://order.jmrai.net
 
 > **不要把 key commit 进去。** `.gitignore` 已经排除了 `.env`。`.env.example` 只是模板。
+
+### 模型选择
+
+生成、编辑、局部重绘和并行批处理均支持 `gpt-image-2.5-sunburst`（默认）与 `gpt-image-2.5-flare`。优先级为：命令行 `--model` > 环境变量 `OPENAI_IMAGE_MODEL` > 默认值 `gpt-image-2.5-sunburst`。
+
+```bash
+# 单次使用 Flare；edit 子命令同样支持 --model
+python3 scripts/gpt_image.py generate --model gpt-image-2.5-flare -p "一只水彩小熊猫" -o ./flare.png
+
+# 后续调用默认使用 Flare
+export OPENAI_IMAGE_MODEL=gpt-image-2.5-flare
+```
+
+仍可显式选择 `gpt-image-2` 等旧模型或网关自定义模型 ID；实际可用性取决于 API 网关。技能名和安装目录统一为 `gpt-image`。
 
 ### 它能做什么
 
@@ -162,9 +177,9 @@ Skill 教 Claude(或任何 agent)规范结构:
 
 - **零 Python 依赖**。CLI 只用 `urllib`、`concurrent.futures`、`argparse`。没有 `requests`、没有 `openai`,没有装包步骤。任何 Python 3.7+ 都能跑。
 - **客户端并行**。`-n 4` 是发 4 个并行的 n=1 请求,而不是请求 host 一次返回 4 张图。墙钟时间快、不用管 host 是否支持 n>1。
-- **合理的默认值**。`--quality high`(这个 host 各档质量同价)。`--size 1024x1024`。`--concurrency 4`。
+- **合理的默认值**。`--model gpt-image-2.5-sunburst`。`--quality high`(这个 host 各档质量同价)。`--size 1024x1024`。`--concurrency 4`。
 - **预先验证**。分辨率约束(最长边 <3840px、比例 ≤3:1)在请求 API 之前检查——快速失败、信息明确。
-- **多图输入优雅拒绝**。这个 host 的 gpt-image-2 不接受一次 /edits 调用传多张输入图。脚本明确报错并给出工作流建议,而不是默默失败。
+- **多图输入优雅拒绝**。脚本每次 /edits 调用只接受一张输入图，传入多张时明确报错并给出工作流建议。
 
 这些都可以改——fork 之后改 `DEFAULT_QUALITY` 或 `DEFAULT_BASE`,或者加个 `--watermark` flag。
 
@@ -173,7 +188,7 @@ Skill 教 Claude(或任何 agent)规范结构:
 CLI 本身可以单独跑。批处理、脚本、手动探索都好用。
 
 ```bash
-GI="python3 ~/.claude/skills/gpt-image-2/scripts/gpt_image.py"
+GI="python3 ~/.claude/skills/gpt-image/scripts/gpt_image.py"
 
 # 生成
 $GI generate -p "a misty mountain temple at dawn, Studio Ghibli watercolor" -o ./temple.png
@@ -193,7 +208,7 @@ $GI edit --help
 ### 更新
 
 ```bash
-cd ~/.claude/skills/gpt-image-2 && git pull
+cd ~/.claude/skills/gpt-image && git pull
 ```
 
 Skill 就是文本 + 一个脚本。无构建、无重启、无注册。
@@ -234,7 +249,7 @@ This skill fixes all of that.
 ### What you get
 
 ```
-gpt-image-2/
+gpt-image/
 ├── SKILL.md                # The entry point. Loaded automatically by the agent.
 ├── README.md               # You are here.
 ├── LICENSE                 # MIT.
@@ -266,8 +281,8 @@ Three design decisions that make this load-bearing instead of decorative:
 #### Claude Code (one-liner)
 
 ```bash
-git clone git@github.com:M0rtzz/claude-image.git ~/.claude/skills/gpt-image-2 \
-  && bash ~/.claude/skills/gpt-image-2/install.sh
+git clone git@github.com:M0rtzz/claude-image.git ~/.claude/skills/gpt-image \
+  && bash ~/.claude/skills/gpt-image/install.sh
 ```
 
 The installer asks for your API key, writes it to `~/.zshrc`, and offers a smoke test.
@@ -277,8 +292,8 @@ After install, Claude auto-discovers the skill on the next image request — no 
 #### Codex (or any agent that scans `~/.agents/skills/`)
 
 ```bash
-git clone git@github.com:M0rtzz/claude-image.git ~/.agents/skills/gpt-image-2 \
-  && bash ~/.agents/skills/gpt-image-2/install.sh
+git clone git@github.com:M0rtzz/claude-image.git ~/.agents/skills/gpt-image \
+  && bash ~/.agents/skills/gpt-image/install.sh
 ```
 
 Same skill, same script, same env vars.
@@ -286,8 +301,8 @@ Same skill, same script, same env vars.
 #### Manual / other agents / direct CLI use
 
 ```bash
-git clone git@github.com:M0rtzz/claude-image.git
-cd gpt-image-2
+git clone git@github.com:M0rtzz/claude-image.git gpt-image
+cd gpt-image
 
 echo 'export OPENAI_IMAGE_API_KEY="sk-..."' >> ~/.zshrc
 echo 'export OPENAI_IMAGE_BASE_URL="https://jmrai.net/v1"' >> ~/.zshrc
@@ -301,18 +316,33 @@ open test.png
 
 ### Credentials
 
-Two environment variables. That's the entire config surface.
+Configure API credentials and the base URL, with an optional default model override.
 
 | Var | Required | Default |
 |-----|----------|---------|
 | `OPENAI_IMAGE_API_KEY` | yes | — |
 | `OPENAI_IMAGE_BASE_URL` | no | `https://jmrai.net/v1` |
+| `OPENAI_IMAGE_MODEL` | no | `gpt-image-2.5-sunburst` |
 
 Falls back to `OPENAI_API_KEY` / `OPENAI_BASE_URL` if the image-specific ones aren't set.
 
 **Buy credits:** https://order.jmrai.net
 
 > **Don't commit your key.** `.gitignore` excludes `.env`. The `.env.example` is a template only.
+
+### Model selection
+
+Generation, editing, inpainting, and parallel batches support `gpt-image-2.5-sunburst` (default) and `gpt-image-2.5-flare`. Selection precedence is: explicit `--model` > `OPENAI_IMAGE_MODEL` > `gpt-image-2.5-sunburst`.
+
+```bash
+# Use Flare for one call; the edit subcommand also accepts --model
+python3 scripts/gpt_image.py generate --model gpt-image-2.5-flare -p "a watercolor red panda" -o ./flare.png
+
+# Use Flare by default for subsequent calls
+export OPENAI_IMAGE_MODEL=gpt-image-2.5-flare
+```
+
+Legacy IDs such as `gpt-image-2` and host-specific model IDs remain accepted; availability depends on the API host. The skill name and installation directory are `gpt-image`.
 
 ### What it can do
 
@@ -357,14 +387,14 @@ This works because Claude *can* see images. It just doesn't, by default, look at
 
 - **Zero Python deps.** Uses only `urllib`, `concurrent.futures`, `argparse`. Runs on any Python 3.7+.
 - **Parallel batching.** `-n 4` fires four parallel single-image requests rather than asking the API for n=4. Faster wall-clock, works regardless of host n>1 support.
-- **Sane defaults.** `--quality high` by default (cost is identical across quality tiers on this host). `--size 1024x1024`. `--concurrency 4`.
+- **Sane defaults.** `--model gpt-image-2.5-sunburst`. `--quality high` by default (cost is identical across quality tiers on this host). `--size 1024x1024`. `--concurrency 4`.
 - **Upfront validation.** Resolution constraints (max side <3840px, ratio ≤3:1) checked before the API round-trip.
-- **Multi-image input gracefully refused.** This host's gpt-image-2 doesn't accept multiple input images per /edits call.
+- **Multi-image input gracefully refused.** The script accepts one input image per /edits call and reports an error with workflow guidance when given more.
 
 ### Manual usage
 
 ```bash
-GI="python3 ~/.claude/skills/gpt-image-2/scripts/gpt_image.py"
+GI="python3 ~/.claude/skills/gpt-image/scripts/gpt_image.py"
 
 $GI generate -p "a misty mountain temple at dawn, Studio Ghibli watercolor" -o ./temple.png
 $GI generate -p "..." -n 4 --concurrency 4 -o ./out
@@ -376,7 +406,7 @@ $GI edit --help
 ### Updating
 
 ```bash
-cd ~/.claude/skills/gpt-image-2 && git pull
+cd ~/.claude/skills/gpt-image && git pull
 ```
 
 The skill is text + a script. No build step, no restart, no registration.
